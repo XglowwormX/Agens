@@ -1,0 +1,12 @@
+create graph basic_recommend; //建一个模式 名为basic_recommend
+set graph_path =  basic_recommend; //切换到此模式
+create vlabel cust;create vlabel prod;create elabel buys;  //建节点表 名为cust；建节点表...；建关系表...
+match p=path( (n:cust) return n; //查找cust表（节点标签名为cust）的节点
+load from public.purchases as row merge (x:cust{c:to_jsonb(row.cust)}) merge (y:prod{p:to_jsonb(row.prod)}) create(x)-[:buys{q:to_jsonb(row.qty)}]->(y); //映射public模式下purchases 表的cust列至当前模式cust表，prod列至prod表，把他们以qty列作为关系属性创建关系放至buys表
+match p=(n:cust)-[]-(m:prod) return p; //查询cust表节点与prod表节点的关系图
+create constraint on cust assert id  is unique;  //建立cust表id字段的唯一性约束
+drop constraint cust_unique_constraint on cust; //移除cust表，名字为cust_unique_constraint的唯一性约束
+create property index on cust (id); //建立cust表的id字段的索引
+drop property index cust_id_idx; //删除cust表，名字为cust_id_idx的索引
+match (n:cust) detach delete n;  //删除cust表的数据（可以匹配删除某一条数据）
+match (n:cust) set n.description='嫉恶如仇的毛脸猴子';  //给cust表所有节点设置一个属性值
