@@ -1,0 +1,341 @@
+链接地址：https://www.meiwen.com.cn/subject/rqxjuctx.html
+一 AgensGraph简介
+AgensGraph 是一个基于 PostgreSQL 的新一代多模型图数据库。它提供图形分析环境，用户可以同时编写、编辑和执行 SQL 和 Cypher 查询。AgensGraph 带有 PostgreSQL 兼容性和 PostgreSQL扩展，能够帮助PostgreSQL用户摆脱数据迁移的痛苦，轻松开发提供高级数据分析的服务。
+
+1.1 AgensGraph特点
+1 万物互联，无论是蛋白网络还是电网，图数据库是必然需求，标准Cypher图查询。
+2 运维配置同PostgreSQL几乎一样，熟悉PG的DBA和开发人员上手容易，开发效率高。
+3 支持sql和Cypher混合查询。两种查询可以实现join操作，从而实现图查询结果匹配对应业务，整体结果输出，减少后端开发工作。
+4 支持csv导入导出，方便rdb数据迁移。
+5 可以使用PG库丰富的其他特性，比如 图+PotGIS，或者数据库自己的事务隔离等等，分布式的话，可以参考pg的分布式方案（个人认为是不改源码的那种，比如fdw或者citus方案，其他pgxc/xl和gp不适合，因为这个agens不是插件，是单独的改的pg的数据库，插件可以用）。
+1.2 AgensGraph vs NoSQL
+AgensGraph即支持图模型，还支持关系模型，文档模型，kv模型。
+
+
+AgensGraph支持多种模型
+二 AgnesGraph安装
+安装和PostgreSQL几乎一模一样，详情如下：
+
+2.1 安装依赖
+ yum install gcc glibc glib-common readline readline-devel zlib zlib-devel flex bison
+2.2 创建用户
+[root@zz ~]# useradd agens
+[root@zz ~]# chown -R agens.agens /home/agens
+2.3 源码安装
+#下载release
+[root@zz ~]#wget https://github.com/bitnine-oss/agensgraph/archive/v2.1.1.tar.gz
+#解压
+[root@zz ~]# tar -zxvf v2.1.1.tar.gz
+#进入目录安装
+[root@zz ~]# cd agensgraph-2.1.1
+[root@zz agensgraph-2.1.1]# ./configure --prefix=/home/agens
+[root@zz agensgraph-2.1.1]# make
+[root@zz agensgraph-2.1.1]# make install
+#安装contrib的pg扩展工具
+[root@zz agensgraph-2.1.1]# cd contrib
+[root@zz contrib]# make
+[root@zz contrib]# make install
+2.4 数据库初始化
+2.4.1 设置环境变量
+[root@zz contrib]# su - agens
+[agens@zz ~]$ vi .bashrc
+#编辑内如如下：
+AGHOME=/home/agens
+export AGHOME
+AGDATA=$AGHOME/data
+export AGDATA
+PATH=$PATH:$HOME/.local/bin:$HOME/bin:$AGHOME/bin
+export PATH
+
+#保存启用环境变量
+[agens@zz ~]$ source .bashrc
+#初始化数据库
+[agens@zz ~]$ initdb -D $AGDATA
+#启动数据库
+[agens@zz ~]$ ag_ctl -D $AGDATA
+#psql登录数据库，进入我们熟悉的psql环境
+[agens@zz ~]$ psql -d postgres
+psql (10.4)
+Type "help" for help.
+
+postgres=# 
+
+结论：和postgresql安装和操作一模一样，其他的如登录授权的pg_hba.conf和服务设置文件postgresql.conf设置和pg也是一样的。
+
+三 AgensGraph概念
+3.1 AgensGraph数据库架构
+AgensGraph是一个多模型数据库，既支持带属性的图模型，也支持关系模型。
+
+
+Agens数据库
+Agens是基于PostgreSQL数据库的，通过schema，支持原生的关系模型，也就是普通的关系表等；通过graph，支持图模型的vertice（顶点）和edge（边）。一句话，在Agens你可以操作关系表，也可以操作图。
+
+3.2 图模型概念
+带属性的图模型
+顶点（Vertices）：一个实体一个顶点。一个实体可以有多个属性。
+边（Edges）：两个实体之间的连接线。当试图删除顶点时，要先删除连接该顶点的边才行（AgensGraph中不允许存在断边，也就是边一定会有连接的两个顶点）。
+属性：实体和边都可以有多个属性。形象举个例子，一个实体对应关系表中一行记录，一个实体的属性代表关系表中这行记录的所有字段和值构成的键值对。
+标签：AgensGraph中有VLABEL ，ELABEL 两个对象，分别定义顶点，边的分组。形象举个例子，标签类似与关系表的表名称，那么一个标签分组下的实体和边，其属性的键名称和数量一致。（ps：理论上是可以不一致，属性是nosql的json形式，但是，实际中的图大部分是关系表导出，所以实际中几乎一致）。
+四 AgensGraph练习
+方便后面描述，新建一个测试数据库作图数据库的测试库。
+
+[agens@zz ~]$ psql -d postgres
+psql (10.4)
+Type "help" for help.
+#新建测试库
+postgres=# create database agens_test;
+#切换测试库
+postgres=# \c agens_test;
+4.1 图管理
+4.1.1 创建
+agens_test=# create graph dlxx;
+4.1.2 查询当前应用图
+agens_test=# SHOW graph_path; 
+ graph_path 
+------------
+ dlxx
+(1 row)
+4.1.3 设置当前应用图
+假设当前应用图为空，可以先设置一个应用图，如下：
+
+agens_test=# SHOW graph_path; 
+ graph_path 
+------------
+ 
+(1 row)
+
+agens_test=# set graph_path='dlxx';
+SET
+agens_test=# SHOW graph_path; 
+ graph_path 
+------------
+ dlxx
+(1 row)
+
+4.1.4 删除图
+cacsade级联删除，会将该图下的对象都删除：
+
+agens_test=# drop graph dlxx cascade;
+4.2 标签（Lables）管理
+4.2.1 标签创建
+#创建顶点标签
+agens_test=# CREATE VLABEL person;
+CREATE VLABEL
+#创建顶点标签，标签friend继承标签person。
+agens_test=# CREATE VLABEL friend inherits (person);
+CREATE VLABEL
+
+#创建边标签
+agens_test=# CREATE ELABEL knows;
+CREATE ELABEL
+agens_test=# CREATE ELABEL live_together;
+CREATE ELABEL
+#创建边标签，标签room_mate继承标签knows和live_together
+agens_test=# CREATE ELABEL room_mate inherits (knows, live_together);
+CREATE ELABEL
+4.2.2 标签删除
+agens_test=# drop ELABEL knows;
+ERROR:  cannot drop elabel knows because other objects depend on it
+DETAIL:  elabel room_mate depends on elabel knows
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+# 因为ELABEL room_mate继承knows，所以删除不了。可以通过两个方式删除
+# 方式一
+agens_test=# drop ELABEL room_mate;
+agens_test=# drop ELABEL knows;
+#方式二
+agens_test=# drop ELABEL knows cascade;
+这些操作其实都是pg的，一模一样。
+
+4.3 索引和约束
+待补充
+
+4.4 图查询
+4.4.1 创建图的连接性
+顶点数据格式：(variable:label {property: value, ...})
+边数据格式：-[variable:label {property: value, ...}]-
+最左边的附加<或最右边的>用于表示边的方向
+
+CREATE VLABEL person;
+CREATE ELABEL knows;
+#name=tom的顶点，通过边（knows），连接最右边的name=summer的顶点
+CREATE (:person {name: 'Tom'})-[:knows {fromdate:'2011-11-24'}]->(:person {name: 'Summer'});
+CREATE (:person {name: 'Pat'})-[:knows {fromdate:'2013-12-25'}]->(:person {name: 'Nikki'});
+CREATE (:person {name: 'Olive'})-[:knows {fromdate:'2015-01-26'}]->(:person {name: 'Todd'});
+#使用MATCH命令，从Person的顶点标签 选择name属性为tom和pat的两个顶点
+#这两个顶点分别设置代指p和k，创建p-edge-k的图连接关系
+MATCH (p:Person {name: 'Tom'}),(k:Person{name: 'Pat'}) 
+CREATE (p)-[:KNOWS {fromdate:'2017-02-27'} ]->(k);
+图形如下：
+
+
+示例图
+示例1：查询与属性name=‘Tom’的顶点有直接连接关系的其他标签为person的顶点：
+
+MATCH (n:person {name: 'Tom'})-[:knows]->(m:person) RETURN n.name AS n, m.name AS m;
+   n   |    m
+-------+----------
+ "Tom" | "Summer"
+ "Tom" | "Pat"
+(2 rows)
+示例2：查询与属性name=‘Tom’的顶点有两层连接关系的其他标签为person的顶点：
+
+MATCH (p:person {name: 'Tom'})-[:knows]->()-[:knows]->(f:person) RETURN f.name;
+  name   
+---------
+ "Nikki"
+(1 row)
+示例3：使用union将图查询结果合并输出：
+
+MATCH (p:person {name: 'Tom'})-[:knows]->(f:person) RETURN f.name
+ UNION ALL
+MATCH (p:person {name: 'Tom'})-[:knows]->()-[:knows]->(f:person) RETURN f.name;
+   name   
+----------
+ "Summer"
+ "Pat"
+ "Nikki"
+(3 rows)
+以上语句可以使用以下等效，注意[r:knows*1..2]写法，1..2代表1级到2级：
+
+MATCH (p:person {name: 'Tom'})-[r:knows*1..2]->(f:person)
+RETURN f.name, r[1].fromdate;
+   name   |   fromdate   
+----------+--------------
+ "Summer" | 
+ "Pat"    | 
+ "Nikki"  | "2013-12-25"
+(3 rows)
+在图数据库中，典型的查询是查找位于可变连接长度的边-顶点路径之后的顶点。 边中使用的* 1..2表示这样的变长边。 其中1是边的最小长度，2是最大长度。
+不指定值，默认值应该是1，就是就一层连接（直接连接关系，有一个边即可达）：
+
+MATCH (p:person {name: 'Tom'})-[r:knows]->(f:person) RETURN f.name;
+   name   
+----------
+ "Summer"
+ "Pat"
+(2 rows)
+指定*，就是有多个边可达，都属于查询要求：
+
+MATCH (p:person {name: 'Tom'})-[r:knows*]->(f:person) RETURN f.name;
+   name   
+----------
+ "Summer"
+ "Pat"
+ "Nikki"
+(3 rows)
+
+4.5 图处理（增删改）
+4.5.1 create
+CREATE (:person {name: 'Tom'})-[:knows {fromdate:'2011-11-24'}]->(:person {name: 'Summer'});
+4.5.2 set
+MATCH (:person {name: 'Tom'})-[r:knows]->(:person {name: 'Summer'})
+SET r.since = '2009-01-08';
+4.5.3 delete
+MATCH (n:person {name: 'Pat'}) DETACH DELETE (n);
+DETACH DELETE将相关的顶点和边一次性全部删除。类似sql的 cascade，级联删除，因为agens不允许断边存在，删除了顶点，这个顶点相关的边都要删了，使用DETACH DELETE更常用。
+
+4.5.4 merge
+这个和sql中的insert into on confict do很像，没有就插入，有就更新，是个命令合并语法。
+merge的意思是，如果图中有查询条件的数据，等同于match，就是查找。如果图中没有查询条件的数据，等同于create，就是创建。
+merge就是有就match，没有就create的复合语法。
+
+CREATE VLABEL customer;
+CREATE VLABEL
+
+CREATE VLABEL city;
+CREATE VLABEL
+
+CREATE (:customer {name:'Tom', city:'santa clara'}),
+(:customer {name:'Summer ', city:'san jose'}),
+(:customer {name:'Pat', city:'santa clara'}),
+(:customer {name:'Nikki', city:'san jose'}),
+(:customer {name:'Olive', city:'san francisco'});
+GRAPH WRITE (INSERT VERTEX 5, INSERT EDGE 0)
+
+#检索所有的custome，将city属性通过merge语法到city顶点标签。
+MATCH (a:customer) MERGE (c:city {name:a.city});
+GRAPH WRITE (INSERT VERTEX 3, INSERT EDGE 0)
+
+#原来city标签是未赋值的，merge之后，属性值发生变化。
+MATCH (c:city) RETURN properties(c);
+        properties         
+---------------------------
+ {"name": "santa clara"}
+ {"name": "san jose"}
+ {"name": "san francisco"}
+(3 rows)
+
+MERGE可以通过 ON MATCH SET和 ON Create SET修改对应图中顶点或者边的属性。
+
+CREATE (:customer {name:'Todd', city:'palo alto'});
+
+MATCH (a:customer)
+MERGE (c:city {name:a.city})
+    ON MATCH SET c.matched = 'true'
+    ON CREATE SET c.created = 'true';
+    
+#匹配到的是matched=true，未匹配的会create，设置created=true
+MATCH (c:city) RETURN properties(c);
+                  properties
+----------------------------------------------
+ {"name": "santa clara", "matched": "true"}
+ {"name": "san jose", "matched": "true"}
+ {"name": "san francisco", "matched": "true"}
+ {"name": "palo alto", "created": "true"}
+(4 rows)
+4.5.5 事务隔离
+BEGIN;
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+MATCH (a:customer)
+MERGE (c:city {name:a.city});
+COMMIT;
+4.5.6 最短路径
+新建一个连接，tom指向olive：
+
+MATCH (p:person {name:'Tom'}), (f:person {name:'Olive'}) CREATE (p)-[:knows]->(f);
+GRAPH WRITE (INSERT VERTEX 0, INSERT EDGE 1)
+
+新建后的图更新如下：
+
+示例图更新
+shortestpath方法用于查询最短路径，需要制定起点，终点的顶点，可以通过-[:knows*1..5]-这只edge的查找深度，比如1-5层连接关系：
+
+MATCH (p1:person {name: 'Tom'}), (p2:person {name: 'Todd'}),
+path=shortestpath((p1)-[:knows*1..5]->(p2)) RETURN path;
+                                                                           path                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ [person[3.1]{"name": "Tom"},knows[5.5][3.1,3.5]{},person[3.5]{"name": "Olive"},knows[5.3][3.5,3.6]{"fromdate": "2015-01-26"},person[3.6]{"name": "Todd"}]
+(1 row)
+查询结果是：tom到olive到todd，上图示意符合一致。
+
+4.5.7 sql和图查询的混合查询
+构建下测试图数据与关系表数据：
+
+CREATE GRAPH bitnine;
+CREATE VLABEL dev;
+CREATE (:dev {name: 'someone', year: 2015});
+CREATE (:dev {name: 'somebody', year: 2016});
+
+CREATE TABLE history (year, event)
+AS VALUES (1996, 'PostgreSQL'), (2016, 'AgensGraph'),(2019, 'sssss');
+执行查询，查询图中年份小于history的年份。图在agens其实都是jsonb的nosql格式，可以通过->>等pg中json，jsonb格式根据键名称获取值等函数，详细查看pg的jsonb function文档：
+cypher in sql:
+
+SELECT history.*,n->>'name' as name 
+FROM history, (MATCH (n:dev) RETURN n) as dev 
+WHERE history.year > (n->>'year')::int;
+ year |   event    |   name   
+------+------------+----------
+ 2016 | AgensGraph | someone
+ 2019 | sssss      | someone
+ 2019 | sssss      | somebody
+(3 rows)
+
+sql in cypher:
+
+MATCH (n:dev) WHERE n.year < (SELECT year FROM history WHERE 
+event = 'AgensGraph') RETURN properties(n) AS n;
+                 n                 
+-----------------------------------
+ {"name": "someone", "year": 2015}
+(1 row)
